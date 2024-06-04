@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "339809455785",
+    "project_id": "dailymemo-a08b6",
+    "storage_bucket": "dailymemo-a08b6.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:339809455785:android:559228de9b4e8a8f2d63b8",
+        "android_client_info": {
+          "package_name": "hr.ferit.dailymemo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADoLyA7KG1S2WHlmFY5v4Ids-EeDbo6aQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
