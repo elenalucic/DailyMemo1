@@ -1,10 +1,13 @@
 package hr.ferit.dailymemo
 
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
-import android.hardware.SensorManager
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
-import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -21,29 +24,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,16 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,17 +53,20 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import hr.ferit.dailymemo.ui.theme.DailyMemoTheme
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createNotificationChannel()
+        scheduleDailyReminder()
+
         setContent {
             val navController = rememberNavController()
 
@@ -106,12 +90,50 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Daily Memo Channel"
+            val descriptionText = "Channel for daily memo reminders"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel("daily_memo_channel", name, importance).apply {
+                description = descriptionText
+            }
+
+            val notificationManager: NotificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun scheduleDailyReminder() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, NotificationReceiver::class.java).apply {
+            putExtra("notificationId", 1)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+            set(Calendar.HOUR_OF_DAY, 8)
+            set(Calendar.MINUTE, 32)
+            set(Calendar.SECOND, 0)
+        }
+
+        alarmManager.setInexactRepeating(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            AlarmManager.INTERVAL_DAY,
+            pendingIntent
+        )
+    }
 }
 
 
 @Composable
 fun HomeScreen(navController: NavController) {
-    val context = LocalContext.current
     val db = FirebaseFirestore.getInstance()
     val notesCollection = db.collection("notes")
     var notes by remember { mutableStateOf(listOf<Triple<String, Long, String>>()) }
@@ -147,27 +169,62 @@ fun HomeScreen(navController: NavController) {
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "MY DAILY MEMO",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
 
-            val groupedNotes = notes.groupBy { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(it.second)) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "MY DAILY MEMO",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color.Black,
+                    modifier = Modifier.padding(vertical = 5.dp)
+                )
+
+            }
+
+            val groupedNotes = notes.groupBy {
+                SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date(it.second))
+            }
 
             val listState = rememberLazyListState()
 
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                groupedNotes.forEach { (date, notes) ->
+                groupedNotes.forEach { (monthYear, notesInMonth) ->
                     item {
-                        DateHeader(date)
+                        MonthYearHeader(monthYear)
                     }
-                    items(notes) { note ->
-                        NoteItem(note = note, navController = navController)
+                    val dailyGroupedNotes = notesInMonth.groupBy {
+                        SimpleDateFormat("dd", Locale.getDefault()).format(Date(it.second))
+                    }
+
+                    dailyGroupedNotes.forEach { (day, notesInDay) ->
+                        item {
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                DateVerticalHeader(day)
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    notesInDay.forEach { note ->
+                                        NoteItem(note = note, navController = navController)
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(Color.Gray)
+                            )
+                        }
                     }
                 }
             }
@@ -190,20 +247,40 @@ fun HomeScreen(navController: NavController) {
     }
 }
 
-
 @Composable
-fun DateHeader(date: String) {
-    Text(
-        text = date,
-        style = MaterialTheme.typography.bodyMedium.copy(
-            fontWeight = FontWeight.Bold,
-            color = Color.DarkGray
-        ),
+fun MonthYearHeader(monthYear: String) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .background(Color.Gray)
-            .padding(8.dp),
+            .background(Color.DarkGray)
+            .padding(3.dp)
+    ) {
+        Text(
+            text = monthYear,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            ),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+
+@Composable
+fun DateVerticalHeader(day: String) {
+    Text(
+        text = day,
+        style = MaterialTheme.typography.bodyLarge.copy(
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        ),
+        modifier = Modifier
+            .padding(end = 8.dp)
+            .background(Color.LightGray)
+            .padding(8.dp)
+            .width(30.dp),
         textAlign = TextAlign.Center
     )
 }
@@ -230,10 +307,10 @@ fun NoteItem(note: Triple<String, Long, String>, navController: NavController) {
                 fontSize = 16.sp
             )
             Spacer(modifier = Modifier.height(4.dp))
-
         }
     }
 }
+
 
 
 
